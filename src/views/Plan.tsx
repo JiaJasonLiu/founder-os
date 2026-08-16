@@ -1,0 +1,484 @@
+import { useState } from "react";
+import type { AppState, Quest, Track } from "@/types";
+import {
+  addQuest,
+  addStep,
+  cycleEstimate,
+  deleteQuest,
+  deleteStep,
+  moveQuest,
+  questCount,
+  setQuestDone,
+  setStepDone,
+  toggleStar,
+} from "@/lib/domain";
+import { fmtMin } from "@/lib/dates";
+import { EST_PRESETS, T, TRACK_PALETTE } from "@/styles/theme";
+import { Button, Check, EstChip, Label, SynthesisLoop, TextField } from "@/components/ui";
+
+type Apply = (fn: (s: AppState) => AppState) => void;
+
+/**
+ * Where work gets structured.
+ *
+ * Quests collapse to a single line by default so a track reads as a
+ * high-level list; expanding one reveals its steps and the add-step form.
+ */
+export default function Plan({ state, apply }: { state: AppState; apply: Apply }) {
+  const [openTrack, setOpenTrack] = useState<string | null>(state.tracks[0]?.id ?? null);
+  const [newTrack, setNewTrack] = useState("");
+
+  const createTrack = () => {
+    const name = newTrack.trim();
+    if (!name) return;
+    apply((s) => ({
+      ...s,
+      tracks: [
+        ...s.tracks,
+        {
+          id: `t${Math.random().toString(36).slice(2, 8)}`,
+          name,
+          tag: "new track",
+          color: TRACK_PALETTE[s.tracks.length % TRACK_PALETTE.length],
+          intent: "Describe why this lane of work matters to your goal.",
+          quests: [],
+        },
+      ],
+    }));
+    setNewTrack("");
+  };
+
+  const promote = (itemId: string) =>
+    apply((s) => {
+      const item = s.backlog.find((b) => b.id === itemId);
+      const target = s.tracks.find((t) => t.groups) ?? s.tracks[0];
+      if (!item || !target) return s;
+
+      const quest: Quest = {
+        id: `q${Math.random().toString(36).slice(2, 8)}`,
+        text: item.text,
+        est: 30,
+        done: false,
+        steps: [],
+      };
+
+      const tracks = s.tracks.map((t) => {
+        if (t.id !== target.id) return t;
+        if (t.groups) {
+          return {
+            ...t,
+            groups: [
+              ...t.groups,
+              { id: `g${Math.random().toString(36).slice(2, 6)}`, label: item.text.split("—")[0].trim(), quests: [quest] },
+            ],
+          };
+        }
+        return { ...t, quests: [...(t.quests ?? []), quest] };
+      });
+
+      return { ...s, tracks, backlog: s.backlog.filter((b) => b.id !== itemId) };
+    });
+
+  return (
+    <div className="fos-fade">
+      <Label style={{ marginBottom: 12 }}>BREAK IT DOWN</Label>
+      <h1 className="fos-serif" style={{ fontSize: 34, margin: "0 0 6px", fontWeight: 400 }}>
+        Plan
+      </h1>
+      <p style={{ color: T.muted, fontSize: 14, margin: "0 0 26px", maxWidth: 580 }}>
+        A high-level list per track. Tap a task to open it, then add hour-sized steps inside. Use ▲▼ to reorder, the time
+        chip to size things, and ★ to flag one for Focus.
+      </p>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        {state.tracks.map((track) => {
+          const { total, done } = questCount(track);
+          const isOpen = openTrack === track.id;
+          return (
+            <div
+              key={track.id}
+              className="fos-card fos-hover"
+              style={{ background: T.panel, border: `1px solid ${T.borderSoft}`, borderRadius: 14, overflow: "hidden" }}
+            >
+              <button
+                onClick={() => setOpenTrack(isOpen ? null : track.id)}
+                style={{
+                  width: "100%",
+                  textAlign: "left",
+                  background: "none",
+                  border: "none",
+                  padding: "18px 20px",
+                  cursor: "pointer",
+                  color: T.text,
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
+                    <span style={{ width: 10, height: 10, borderRadius: "50%", background: track.color, flexShrink: 0 }} />
+                    <div>
+                      <div style={{ fontSize: 17, fontWeight: 600 }}>{track.name}</div>
+                      <div className="fos-mono" style={{ fontSize: 11, color: T.muted, marginTop: 2 }}>
+                        {track.tag}
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                    <span className="fos-mono" style={{ fontSize: 12, color: T.muted }}>
+                      {done}/{total}
+                    </span>
+                    <span
+                      style={{
+                        color: T.faint,
+                        transform: isOpen ? "rotate(90deg)" : "none",
+                        transition: "transform .2s",
+                        fontSize: 12,
+                      }}
+                    >
+                      ▶
+                    </span>
+                  </div>
+                </div>
+              </button>
+
+              {isOpen && (
+                <div style={{ padding: "0 20px 20px" }}>
+                  <p style={{ color: T.muted, fontSize: 13.5, lineHeight: 1.5, margin: "0 0 16px", paddingLeft: 22 }}>
+                    {track.intent}
+                  </p>
+                  {track.id === "t4" && (
+                    <div style={{ paddingLeft: 22, marginBottom: 18 }}>
+                      <SynthesisLoop />
+                    </div>
+                  )}
+
+                  {track.groups
+                    ? track.groups.map((g) => (
+                        <div key={g.id} style={{ marginBottom: 16 }}>
+                          <Label color={track.color} style={{ fontSize: 11, letterSpacing: ".1em", marginBottom: 8, paddingLeft: 22 }}>
+                            {g.label.toUpperCase()}
+                          </Label>
+                          <QuestList state={state} apply={apply} track={track} groupId={g.id} quests={g.quests} />
+                        </div>
+                      ))
+                    : (
+                      <QuestList state={state} apply={apply} track={track} groupId={null} quests={track.quests ?? []} />
+                    )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* add a track */}
+      <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+        <TextField
+          value={newTrack}
+          onChange={(e) => setNewTrack(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && createTrack()}
+          placeholder="Add a new track…"
+          style={{ flex: 1 }}
+        />
+        <Button onClick={createTrack} style={{ padding: "0 18px" }}>
+          ADD TRACK
+        </Button>
+      </div>
+
+      {state.backlog.length > 0 && (
+        <div style={{ marginTop: 30 }}>
+          <Label style={{ marginBottom: 4 }}>PARKED · BACKLOG</Label>
+          <p style={{ color: T.muted, fontSize: 13, margin: "0 0 14px" }}>
+            Things worth doing later. Promote one into a track when the moment's right.
+          </p>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {state.backlog.map((b) => (
+              <div
+                key={b.id}
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  gap: 14,
+                  padding: "14px 16px",
+                  background: T.panel,
+                  border: `1px solid ${T.borderSoft}`,
+                  borderRadius: 12,
+                }}
+              >
+                <div>
+                  <div style={{ fontSize: 14.5, fontWeight: 500 }}>{b.text}</div>
+                  <div className="fos-mono" style={{ fontSize: 11, color: T.muted, marginTop: 4 }}>
+                    {b.note}
+                  </div>
+                </div>
+                <Button onClick={() => promote(b.id)} style={{ border: `1px solid ${T.clay}`, color: T.clay, flexShrink: 0 }}>
+                  PROMOTE →
+                </Button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function QuestList({
+  state,
+  apply,
+  track,
+  groupId,
+  quests,
+}: {
+  state: AppState;
+  apply: Apply;
+  track: Track;
+  groupId: string | null;
+  quests: Quest[];
+}) {
+  const [draft, setDraft] = useState("");
+  const add = () => {
+    if (!draft.trim()) return;
+    apply((s) => addQuest(s, track.id, groupId, draft));
+    setDraft("");
+  };
+
+  return (
+    <div>
+      {quests.map((q, i) => (
+        <QuestRow
+          key={q.id}
+          state={state}
+          apply={apply}
+          track={track}
+          groupId={groupId}
+          quest={q}
+          index={i}
+          count={quests.length}
+        />
+      ))}
+      <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+        <TextField
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && add()}
+          placeholder="Add a task…"
+          style={{ flex: 1 }}
+        />
+        <Button onClick={add} style={{ padding: "0 16px" }}>
+          ADD
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function QuestRow({
+  state,
+  apply,
+  track,
+  groupId,
+  quest,
+  index,
+  count,
+}: {
+  state: AppState;
+  apply: Apply;
+  track: Track;
+  groupId: string | null;
+  quest: Quest;
+  index: number;
+  count: number;
+}) {
+  const [open, setOpen] = useState(false);
+  const [stepText, setStepText] = useState("");
+  const [stepEst, setStepEst] = useState(30);
+
+  const hasSteps = quest.steps.length > 0;
+  const starred = state.starters.includes(quest.id);
+  const totalEst = hasSteps ? quest.steps.reduce((s, x) => s + x.est, 0) : quest.est;
+  const doneSteps = quest.steps.filter((s) => s.done).length;
+
+  const submitStep = () => {
+    if (!stepText.trim()) return;
+    apply((s) => addStep(s, track.id, quest.id, stepText, stepEst));
+    setStepText("");
+  };
+
+  const arrowStyle = (disabled: boolean) => ({
+    background: "none",
+    border: "none",
+    padding: "0 3px",
+    lineHeight: 0.9,
+    fontSize: 9,
+    color: disabled ? T.borderSoft : T.faint,
+    cursor: disabled ? ("default" as const) : ("pointer" as const),
+  });
+
+  return (
+    <div style={{ borderTop: `1px solid ${T.borderSoft}`, padding: "7px 0" }}>
+      <div className="fos-row" style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        <div style={{ display: "flex", flexDirection: "column" }}>
+          <button
+            onClick={() => apply((s) => moveQuest(s, track.id, groupId, quest.id, -1))}
+            disabled={index === 0}
+            aria-label="Move up"
+            style={arrowStyle(index === 0)}
+          >
+            ▲
+          </button>
+          <button
+            onClick={() => apply((s) => moveQuest(s, track.id, groupId, quest.id, 1))}
+            disabled={index === count - 1}
+            aria-label="Move down"
+            style={arrowStyle(index === count - 1)}
+          >
+            ▼
+          </button>
+        </div>
+
+        <Check
+          done={quest.done}
+          color={track.color}
+          onClick={() => apply((s) => setQuestDone(s, track.id, quest.id, !quest.done))}
+        />
+
+        <div onClick={() => setOpen(!open)} style={{ flex: 1, minWidth: 0, cursor: "pointer" }}>
+          <div
+            style={{
+              fontSize: 14.5,
+              lineHeight: 1.4,
+              textDecoration: quest.done ? "line-through" : "none",
+              color: quest.done ? T.muted : T.text,
+            }}
+          >
+            {quest.text}
+          </div>
+          <div className="fos-mono" style={{ fontSize: 10, color: T.muted, marginTop: 4 }}>
+            {hasSteps ? `${doneSteps}/${quest.steps.length} steps · ${fmtMin(totalEst)}` : fmtMin(quest.est)}
+            {starred ? " · ★" : ""}
+          </div>
+        </div>
+
+        <button
+          onClick={() => apply((s) => toggleStar(s, quest.id))}
+          title="Flag for Focus"
+          className="fos-btn"
+          style={{ background: "none", border: "none", fontSize: 14, color: starred ? T.brass : T.faint, padding: 0 }}
+        >
+          {starred ? "★" : "☆"}
+        </button>
+        <button
+          onClick={() => setOpen(!open)}
+          className="fos-btn"
+          title={open ? "Collapse" : "Expand"}
+          style={{
+            background: "none",
+            border: "none",
+            color: T.faint,
+            fontSize: 12,
+            padding: "0 2px",
+            transform: open ? "rotate(90deg)" : "none",
+            transition: "transform .2s",
+          }}
+        >
+          ▶
+        </button>
+        <button
+          onClick={() => apply((s) => deleteQuest(s, track.id, quest.id))}
+          className="fos-del fos-mono"
+          title="Delete task"
+          style={{ background: "none", border: "none", color: T.faint, fontSize: 16 }}
+        >
+          ×
+        </button>
+      </div>
+
+      {open && (
+        <div style={{ marginLeft: 46, marginTop: 10 }}>
+          {!hasSteps && (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+              <Label style={{ fontSize: 10, letterSpacing: ".06em" }}>ESTIMATE</Label>
+              <EstChip
+                min={quest.est}
+                color={track.color}
+                onCycle={() => apply((s) => cycleEstimate(s, track.id, quest.id, null, EST_PRESETS))}
+              />
+            </div>
+          )}
+
+          {hasSteps && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 14 }}>
+              {quest.steps.map((step) => (
+                <div key={step.id} className="fos-row" style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                  <Check
+                    done={step.done}
+                    color={track.color}
+                    size={16}
+                    onClick={() => apply((s) => setStepDone(s, track.id, quest.id, step.id, !step.done))}
+                  />
+                  <span
+                    style={{
+                      flex: 1,
+                      fontSize: 13.5,
+                      textDecoration: step.done ? "line-through" : "none",
+                      color: step.done ? T.muted : T.text,
+                    }}
+                  >
+                    {step.text}
+                  </span>
+                  <EstChip
+                    min={step.est}
+                    color={track.color}
+                    onCycle={() => apply((s) => cycleEstimate(s, track.id, quest.id, step.id, EST_PRESETS))}
+                  />
+                  <button
+                    onClick={() => apply((s) => deleteStep(s, track.id, quest.id, step.id))}
+                    className="fos-del fos-mono"
+                    title="Delete step"
+                    style={{ background: "none", border: "none", color: T.faint, fontSize: 14 }}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div>
+            <Label color={track.color} style={{ fontSize: 10, letterSpacing: ".08em", marginBottom: 7 }}>
+              + ADD STEP
+            </Label>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <TextField
+                value={stepText}
+                onChange={(e) => setStepText(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && submitStep()}
+                placeholder="A step you can finish in one sitting…"
+                style={{ flex: 1, fontSize: 13.5, padding: "8px 11px" }}
+              />
+              <button
+                onClick={() => setStepEst(EST_PRESETS[(EST_PRESETS.indexOf(stepEst) + 1) % EST_PRESETS.length])}
+                className="fos-btn fos-mono"
+                title="Estimate"
+                style={{
+                  background: "transparent",
+                  border: `1px solid ${T.border}`,
+                  borderRadius: 20,
+                  padding: "6px 11px",
+                  fontSize: 11,
+                  color: T.muted,
+                }}
+              >
+                {stepEst}m
+              </button>
+              <Button onClick={submitStep} style={{ padding: "8px 12px" }}>
+                ADD
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
