@@ -62,10 +62,19 @@ textarea { resize: vertical; }
 
 .fos-bar { transition: width .5s cubic-bezier(.4, 0, .2, 1); }
 
+/* Momentary fade when a task/step is checked off, before it tucks away. */
+.fos-complete-fade {
+  opacity: 0;
+  transform: translateX(4px);
+  max-height: 0;
+  overflow: hidden;
+  transition: opacity .4s ease, transform .4s ease, max-height .4s ease .05s;
+}
+
 *:focus-visible { outline: 2px solid var(--fos-brass); outline-offset: 2px; }
 
 @media (prefers-reduced-motion: reduce) {
-  .fos-fade, .fos-bar, .fos-toast { animation: none !important; transition: none !important; }
+  .fos-fade, .fos-bar, .fos-toast, .fos-complete-fade { animation: none !important; transition: none !important; }
 }
 
 @media (max-width: 760px) {

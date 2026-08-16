@@ -410,26 +410,110 @@ function QuestList({
 }) {
   const [draft, setDraft] = useState("");
   const [draftEst, setDraftEst] = useState(30);
+  const [fadingIds, setFadingIds] = useState<Set<string>>(new Set());
+  const [showDone, setShowDone] = useState(false);
+  const fadeTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+
+  useEffect(
+    () => () => {
+      fadeTimers.current.forEach((t) => clearTimeout(t));
+    },
+    [],
+  );
+
   const add = () => {
     if (!draft.trim()) return;
     apply((s) => addQuest(s, track.id, draft, draftEst));
     setDraft("");
   };
 
+  const setDone = (questId: string, done: boolean) => {
+    if (done) {
+      setFadingIds((prev) => new Set(prev).add(questId));
+      clearTimeout(fadeTimers.current.get(questId));
+      const timer = setTimeout(() => {
+        setFadingIds((prev) => {
+          const next = new Set(prev);
+          next.delete(questId);
+          return next;
+        });
+        fadeTimers.current.delete(questId);
+      }, 450);
+      fadeTimers.current.set(questId, timer);
+    } else {
+      clearTimeout(fadeTimers.current.get(questId));
+      fadeTimers.current.delete(questId);
+      setFadingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(questId);
+        return next;
+      });
+    }
+    apply((s) => setQuestDone(s, track.id, questId, done));
+  };
+
+  const openQuests = quests.filter((q) => !q.done || fadingIds.has(q.id));
+  const doneQuests = quests.filter((q) => q.done && !fadingIds.has(q.id));
+
   return (
     <div>
-      {quests.map((q, i) => (
+      {openQuests.map((q) => (
         <QuestRow
           key={q.id}
           state={state}
           apply={apply}
           track={track}
           quest={q}
-          index={i}
+          index={quests.indexOf(q)}
           count={quests.length}
           editMode={editMode}
+          onSetDone={setDone}
+          fading={fadingIds.has(q.id)}
         />
       ))}
+
+      {doneQuests.length > 0 && (
+        <div style={{ borderTop: openQuests.length > 0 ? `1px solid ${T.borderSoft}` : "none" }}>
+          <button
+            onClick={() => setShowDone(!showDone)}
+            className="fos-btn fos-mono"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              width: "100%",
+              background: "none",
+              border: "none",
+              padding: "9px 0",
+              fontSize: 11.5,
+              color: T.faint,
+              cursor: "pointer",
+            }}
+          >
+            <span style={{ transform: showDone ? "rotate(90deg)" : "none", transition: "transform .2s", fontSize: 10 }}>▸</span>
+            ✓ {doneQuests.length} done
+          </button>
+          {showDone && (
+            <div>
+              {doneQuests.map((q) => (
+                <QuestRow
+                  key={q.id}
+                  state={state}
+                  apply={apply}
+                  track={track}
+                  quest={q}
+                  index={quests.indexOf(q)}
+                  count={quests.length}
+                  editMode={editMode}
+                  onSetDone={setDone}
+                  fading={false}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       <div style={{ display: "flex", gap: 8, marginTop: 12, alignItems: "center" }}>
         <TextField
           value={draft}
@@ -469,6 +553,8 @@ function QuestRow({
   index,
   count,
   editMode,
+  onSetDone,
+  fading,
 }: {
   state: AppState;
   apply: Apply;
@@ -477,6 +563,8 @@ function QuestRow({
   index: number;
   count: number;
   editMode: boolean;
+  onSetDone: (questId: string, done: boolean) => void;
+  fading: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [stepText, setStepText] = useState("");
@@ -504,7 +592,10 @@ function QuestRow({
   });
 
   return (
-    <div style={{ borderTop: `1px solid ${T.borderSoft}`, padding: "7px 0" }}>
+    <div
+      className={fading ? "fos-complete-fade" : undefined}
+      style={{ borderTop: `1px solid ${T.borderSoft}`, padding: "7px 0" }}
+    >
       <div className="fos-row" style={{ display: "flex", gap: 8, alignItems: "center" }}>
         <div style={{ display: "flex", flexDirection: "column" }}>
           <button
@@ -528,7 +619,7 @@ function QuestRow({
         <Check
           done={quest.done}
           color={track.color}
-          onClick={() => apply((s) => setQuestDone(s, track.id, quest.id, !quest.done))}
+          onClick={() => onSetDone(quest.id, !quest.done)}
         />
 
         <div onClick={() => !editMode && setOpen(!open)} style={{ flex: 1, minWidth: 0, cursor: editMode ? "default" : "pointer" }}>

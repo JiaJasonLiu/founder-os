@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Action, AppState, Quest, Track } from "@/types";
 import { buildPlan, completeAction, focusScope, trackQuests } from "@/lib/domain";
 import { dayStr, fmtMin, todayStr } from "@/lib/dates";
@@ -26,6 +26,15 @@ export default function Focus({
   const [sessionKeys, setSessionKeys] = useState<string[] | null>(null);
   const [showAll, setShowAll] = useState(false);
   const [picking, setPicking] = useState<"month" | "week" | null>(null);
+  const [fadingActions, setFadingActions] = useState<Map<string, Action>>(new Map());
+  const fadeTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+
+  useEffect(
+    () => () => {
+      fadeTimers.current.forEach((t) => clearTimeout(t));
+    },
+    [],
+  );
 
   const { monthTrackId, weekQuestId, weekSetAt } = state.spotlight;
   const monthTrack = state.tracks.find((t) => t.id === monthTrackId) ?? null;
@@ -51,6 +60,11 @@ export default function Focus({
   const inSession = actions.filter((a) => keys.includes(a.key));
   const rest = actions.filter((a) => !keys.includes(a.key));
   const planned = inSession.reduce((sum, a) => sum + a.est, 0);
+
+  const visibleSession: Action[] = [...inSession];
+  for (const [key, action] of fadingActions) {
+    if (!visibleSession.some((a) => a.key === key)) visibleSession.push(action);
+  }
 
   const saveGoal = () => {
     const value = draftGoal.trim();
@@ -87,7 +101,20 @@ export default function Focus({
     setPicking(null);
   };
 
-  const complete = (a: Action) => apply((s) => completeAction(s, a));
+  const complete = (a: Action) => {
+    setFadingActions((prev) => new Map(prev).set(a.key, a));
+    clearTimeout(fadeTimers.current.get(a.key));
+    const timer = setTimeout(() => {
+      setFadingActions((prev) => {
+        const next = new Map(prev);
+        next.delete(a.key);
+        return next;
+      });
+      fadeTimers.current.delete(a.key);
+    }, 450);
+    fadeTimers.current.set(a.key, timer);
+    apply((s) => completeAction(s, a));
+  };
 
   const weekStale = weekSetAt !== null && Date.now() - weekSetAt > WEEK_MS;
   const phase = state.phases.find((p) => p.n === state.phase);
@@ -303,7 +330,7 @@ export default function Focus({
         <ProgressBar pct={budget ? (planned / budget) * 100 : 0} color={planned > budget ? T.clay : T.brass} />
 
         <div style={{ marginTop: 18, display: "flex", flexDirection: "column", gap: 8 }}>
-          {inSession.length === 0 && (
+          {visibleSession.length === 0 && (
             <EmptyState>
               {actions.length
                 ? "Pick a longer budget, or add more below."
@@ -312,42 +339,47 @@ export default function Focus({
                   : "Nothing open. Add tasks or steps in Plan."}
             </EmptyState>
           )}
-          {inSession.map((a) => (
-            <div
-              key={a.key}
-              className="fos-row"
-              style={{
-                display: "flex",
-                gap: 12,
-                alignItems: "flex-start",
-                padding: "12px 14px",
-                background: T.bg,
-                border: `1px solid ${T.borderSoft}`,
-                borderRadius: 11,
-              }}
-            >
-              <Check done={false} color={a.color} onClick={() => complete(a)} label={`Complete: ${a.label}`} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 14.5, lineHeight: 1.4 }}>{a.label}</div>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
-                  <span style={{ width: 7, height: 7, borderRadius: "50%", background: a.color }} />
-                  <span className="fos-mono" style={{ fontSize: 10, color: T.muted }}>
-                    {fmtMin(a.est)}
-                    {a.parent ? ` · ${a.parent}` : ""}
-                    {a.star ? " · ★" : ""}
-                  </span>
-                </div>
-              </div>
-              <button
-                onClick={() => setSessionKeys(keys.filter((k) => k !== a.key))}
-                className="fos-del fos-mono"
-                title="Not now"
-                style={{ background: "none", border: "none", color: T.faint, fontSize: 16 }}
+          {visibleSession.map((a) => {
+            const isFading = fadingActions.has(a.key);
+            return (
+              <div
+                key={a.key}
+                className={isFading ? "fos-row fos-complete-fade" : "fos-row"}
+                style={{
+                  display: "flex",
+                  gap: 12,
+                  alignItems: "flex-start",
+                  padding: "12px 14px",
+                  background: T.bg,
+                  border: `1px solid ${T.borderSoft}`,
+                  borderRadius: 11,
+                }}
               >
-                ×
-              </button>
-            </div>
-          ))}
+                <Check done={isFading} color={a.color} onClick={() => !isFading && complete(a)} label={`Complete: ${a.label}`} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 14.5, lineHeight: 1.4, textDecoration: isFading ? "line-through" : "none" }}>{a.label}</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
+                    <span style={{ width: 7, height: 7, borderRadius: "50%", background: a.color }} />
+                    <span className="fos-mono" style={{ fontSize: 10, color: T.muted }}>
+                      {fmtMin(a.est)}
+                      {a.parent ? ` · ${a.parent}` : ""}
+                      {a.star ? " · ★" : ""}
+                    </span>
+                  </div>
+                </div>
+                {!isFading && (
+                  <button
+                    onClick={() => setSessionKeys(keys.filter((k) => k !== a.key))}
+                    className="fos-del fos-mono"
+                    title="Not now"
+                    style={{ background: "none", border: "none", color: T.faint, fontSize: 16 }}
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
+            );
+          })}
         </div>
 
         <div style={{ display: "flex", gap: 10, marginTop: 14, flexWrap: "wrap" }}>
