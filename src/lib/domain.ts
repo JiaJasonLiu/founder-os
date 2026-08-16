@@ -13,9 +13,8 @@ import { mondayOf, periodList, prevDay, prevPeriod, streakCount, todayStr } from
  * Reading the model
  * ------------------------------------------------------------------ */
 
-/** All quests in a track, whether it uses `quests` or `groups`. */
 export function trackQuests(t: Track): Quest[] {
-  return t.groups ? t.groups.flatMap((g) => g.quests) : (t.quests ?? []);
+  return t.quests;
 }
 
 export function questCount(t: Track): { total: number; done: number } {
@@ -200,7 +199,6 @@ export function completeAction(state: AppState, action: Action): AppState {
 export function addQuest(
   state: AppState,
   trackId: string,
-  groupId: string | null,
   text: string,
   est = 30,
 ): AppState {
@@ -210,9 +208,7 @@ export function addQuest(
   if (!t) return state;
 
   const quest: Quest = { id: uid("q"), text: text.trim(), est, done: false, steps: [] };
-  if (groupId && t.groups) t.groups.find((g) => g.id === groupId)?.quests.push(quest);
-  else if (t.quests) t.quests.push(quest);
-  else return state;
+  t.quests.push(quest);
 
   return next;
 }
@@ -222,8 +218,7 @@ export function deleteQuest(state: AppState, trackId: string, questId: string): 
   const t = findTrack(next, trackId);
   if (!t) return state;
 
-  if (t.groups) t.groups.forEach((g) => (g.quests = g.quests.filter((q) => q.id !== questId)));
-  else if (t.quests) t.quests = t.quests.filter((q) => q.id !== questId);
+  t.quests = t.quests.filter((q) => q.id !== questId);
 
   next.starters = next.starters.filter((s) => s !== questId);
   if (next.spotlight.weekQuestId === questId) {
@@ -289,7 +284,6 @@ export function cycleEstimate(
 export function moveQuest(
   state: AppState,
   trackId: string,
-  groupId: string | null,
   questId: string,
   dir: -1 | 1,
 ): AppState {
@@ -297,8 +291,7 @@ export function moveQuest(
   const t = findTrack(next, trackId);
   if (!t) return state;
 
-  const arr = groupId ? t.groups?.find((g) => g.id === groupId)?.quests : t.quests;
-  if (!arr) return state;
+  const arr = t.quests;
 
   const i = arr.findIndex((q) => q.id === questId);
   const j = i + dir;

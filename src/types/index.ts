@@ -40,17 +40,7 @@ export interface Quest {
   steps: Step[];
 }
 
-/** Optional sub-grouping inside a track (e.g. Expression / Connection). */
-export interface QuestGroup {
-  id: string;
-  label: string;
-  quests: Quest[];
-}
-
-/**
- * A lane of work. A track holds either a flat `quests` list or `groups`
- * of quests — never both. Use `trackQuests()` to read either shape.
- */
+/** A lane of work — a flat list of quests. */
 export interface Track {
   id: string;
   name: string;
@@ -60,8 +50,7 @@ export interface Track {
   color: string;
   /** Why this track exists — shown when the track is expanded. */
   intent: string;
-  quests?: Quest[];
-  groups?: QuestGroup[];
+  quests: Quest[];
 }
 
 /** A broad era on the way to the goal. Display-only. */

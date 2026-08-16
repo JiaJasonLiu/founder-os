@@ -30,7 +30,7 @@ const founderTrack: Template = {
     { n: 2, label: "Optimize savings & build audience", note: "runway + network" },
     { n: 3, label: "Make the leap", note: "the leap" },
   ],
-  starters: ["t1q1", "t3bq1"],
+  starters: ["t1q1", "t3b"],
   tracks: [
     {
       id: "t1",
@@ -95,23 +95,27 @@ const founderTrack: Template = {
       color: T.clay,
       intent:
         "Two halves: getting ideas out with weight, and the relationships a cofounder lives on.",
-      groups: [
+      quests: [
         {
           id: "t3a",
-          label: "Expression",
-          quests: [
-            { id: "t3aq1", text: "Share risks + implications + your intended fix, not just conclusions", est: 20, done: false, steps: [] },
-            { id: "t3aq2", text: "Pre-commit to contributing N times per meeting", est: 15, done: false, steps: [] },
-            { id: "t3aq3", text: "Interrupt effectively — pre-unmute, claim the floor", est: 15, done: false, steps: [] },
+          text: "Expression",
+          est: 50,
+          done: false,
+          steps: [
+            { id: "t3aq1", text: "Share risks + implications + your intended fix, not just conclusions", est: 20, done: false },
+            { id: "t3aq2", text: "Pre-commit to contributing N times per meeting", est: 15, done: false },
+            { id: "t3aq3", text: "Interrupt effectively — pre-unmute, claim the floor", est: 15, done: false },
           ],
         },
         {
           id: "t3b",
-          label: "Connection",
-          quests: [
-            { id: "t3bq1", text: "Message someone at work — no agenda, just curiosity", est: 10, done: false, steps: [] },
-            { id: "t3bq2", text: "Be genuinely curious about a colleague; ask and follow up", est: 10, done: false, steps: [] },
-            { id: "t3bq3", text: "End an exchange on an open question, not a statement", est: 10, done: false, steps: [] },
+          text: "Connection",
+          est: 30,
+          done: false,
+          steps: [
+            { id: "t3bq1", text: "Message someone at work — no agenda, just curiosity", est: 10, done: false },
+            { id: "t3bq2", text: "Be genuinely curious about a colleague; ask and follow up", est: 10, done: false },
+            { id: "t3bq3", text: "End an exchange on an open question, not a statement", est: 10, done: false },
           ],
         },
       ],

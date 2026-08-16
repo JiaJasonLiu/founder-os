@@ -1,4 +1,4 @@
-import type { AppState, Template } from "@/types";
+import type { AppState, Quest, Template } from "@/types";
 
 const STORAGE_KEY = "founder-os:state";
 export const SCHEMA_VERSION = 1;
@@ -34,9 +34,7 @@ export function stateFromTemplate(
     : template.tracks;
 
   // Drop starred quests that belong to tracks the user didn't pick.
-  const keptQuestIds = new Set(
-    chosen.flatMap((t) => (t.groups ? t.groups.flatMap((g) => g.quests) : (t.quests ?? []))).map((q) => q.id),
-  );
+  const keptQuestIds = new Set(chosen.flatMap((t) => t.quests).map((q) => q.id));
 
   return {
     ...emptyState(),
@@ -73,15 +71,29 @@ function migrate(raw: Partial<AppState>): AppState {
     starters: raw.starters ?? [],
   };
 
+  // Older saves may have quests nested under `groups`; flatten each group into
+  // a parent quest whose steps are the group's old quests.
+  for (const track of state.tracks) {
+    const groups = (track as { groups?: { id: string; label: string; quests: Quest[] }[] }).groups;
+    if (groups) {
+      track.quests = groups.map((g) => ({
+        id: g.id,
+        text: g.label,
+        est: g.quests.reduce((sum, q) => sum + (q.est ?? 30), 0),
+        done: g.quests.every((q) => q.done),
+        steps: g.quests.map((q) => ({ id: q.id, text: q.text, est: q.est ?? 30, done: q.done })),
+      }));
+      delete (track as { groups?: unknown }).groups;
+    }
+  }
+
   // Older saves may lack estimates or step arrays.
   for (const track of state.tracks) {
-    const lists = track.groups ? track.groups.map((g) => g.quests) : [track.quests ?? []];
-    for (const quests of lists) {
-      for (const q of quests) {
-        if (q.est == null) q.est = 30;
-        if (!q.steps) q.steps = [];
-        for (const s of q.steps) if (s.est == null) s.est = 15;
-      }
+    track.quests ??= [];
+    for (const q of track.quests) {
+      if (q.est == null) q.est = 30;
+      if (!q.steps) q.steps = [];
+      for (const s of q.steps) if (s.est == null) s.est = 15;
     }
   }
 

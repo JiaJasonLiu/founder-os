@@ -51,7 +51,7 @@ export default function Plan({ state, apply }: { state: AppState; apply: Apply }
   const promote = (itemId: string) =>
     apply((s) => {
       const item = s.backlog.find((b) => b.id === itemId);
-      const target = s.tracks.find((t) => t.groups) ?? s.tracks[0];
+      const target = s.tracks[0];
       if (!item || !target) return s;
 
       const quest: Quest = {
@@ -62,19 +62,9 @@ export default function Plan({ state, apply }: { state: AppState; apply: Apply }
         steps: [],
       };
 
-      const tracks = s.tracks.map((t) => {
-        if (t.id !== target.id) return t;
-        if (t.groups) {
-          return {
-            ...t,
-            groups: [
-              ...t.groups,
-              { id: `g${Math.random().toString(36).slice(2, 6)}`, label: item.text.split("—")[0].trim(), quests: [quest] },
-            ],
-          };
-        }
-        return { ...t, quests: [...(t.quests ?? []), quest] };
-      });
+      const tracks = s.tracks.map((t) =>
+        t.id === target.id ? { ...t, quests: [...t.quests, quest] } : t,
+      );
 
       return { ...s, tracks, backlog: s.backlog.filter((b) => b.id !== itemId) };
     });
@@ -151,18 +141,7 @@ export default function Plan({ state, apply }: { state: AppState; apply: Apply }
                     </div>
                   )}
 
-                  {track.groups
-                    ? track.groups.map((g) => (
-                        <div key={g.id} style={{ marginBottom: 16 }}>
-                          <Label color={track.color} style={{ fontSize: 11, letterSpacing: ".1em", marginBottom: 8, paddingLeft: 22 }}>
-                            {g.label.toUpperCase()}
-                          </Label>
-                          <QuestList state={state} apply={apply} track={track} groupId={g.id} quests={g.quests} />
-                        </div>
-                      ))
-                    : (
-                      <QuestList state={state} apply={apply} track={track} groupId={null} quests={track.quests ?? []} />
-                    )}
+                  <QuestList state={state} apply={apply} track={track} quests={track.quests} />
                 </div>
               )}
             </div>
@@ -227,19 +206,17 @@ function QuestList({
   state,
   apply,
   track,
-  groupId,
   quests,
 }: {
   state: AppState;
   apply: Apply;
   track: Track;
-  groupId: string | null;
   quests: Quest[];
 }) {
   const [draft, setDraft] = useState("");
   const add = () => {
     if (!draft.trim()) return;
-    apply((s) => addQuest(s, track.id, groupId, draft));
+    apply((s) => addQuest(s, track.id, draft));
     setDraft("");
   };
 
@@ -251,7 +228,6 @@ function QuestList({
           state={state}
           apply={apply}
           track={track}
-          groupId={groupId}
           quest={q}
           index={i}
           count={quests.length}
@@ -277,7 +253,6 @@ function QuestRow({
   state,
   apply,
   track,
-  groupId,
   quest,
   index,
   count,
@@ -285,7 +260,6 @@ function QuestRow({
   state: AppState;
   apply: Apply;
   track: Track;
-  groupId: string | null;
   quest: Quest;
   index: number;
   count: number;
@@ -320,7 +294,7 @@ function QuestRow({
       <div className="fos-row" style={{ display: "flex", gap: 8, alignItems: "center" }}>
         <div style={{ display: "flex", flexDirection: "column" }}>
           <button
-            onClick={() => apply((s) => moveQuest(s, track.id, groupId, quest.id, -1))}
+            onClick={() => apply((s) => moveQuest(s, track.id, quest.id, -1))}
             disabled={index === 0}
             aria-label="Move up"
             style={arrowStyle(index === 0)}
@@ -328,7 +302,7 @@ function QuestRow({
             ▲
           </button>
           <button
-            onClick={() => apply((s) => moveQuest(s, track.id, groupId, quest.id, 1))}
+            onClick={() => apply((s) => moveQuest(s, track.id, quest.id, 1))}
             disabled={index === count - 1}
             aria-label="Move down"
             style={arrowStyle(index === count - 1)}
