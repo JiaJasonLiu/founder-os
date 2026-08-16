@@ -71,10 +71,12 @@ export function EstChip({
   min,
   onCycle,
   color,
+  style,
 }: {
   min: number;
   onCycle: () => void;
   color?: string;
+  style?: CSSProperties;
 }) {
   return (
     <button
@@ -89,6 +91,7 @@ export function EstChip({
         fontSize: 10.5,
         color: color ?? T.muted,
         flexShrink: 0,
+        ...style,
       }}
     >
       {min}m

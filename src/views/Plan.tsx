@@ -214,9 +214,10 @@ function QuestList({
   quests: Quest[];
 }) {
   const [draft, setDraft] = useState("");
+  const [draftEst, setDraftEst] = useState(30);
   const add = () => {
     if (!draft.trim()) return;
-    apply((s) => addQuest(s, track.id, draft));
+    apply((s) => addQuest(s, track.id, draft, draftEst));
     setDraft("");
   };
 
@@ -233,15 +234,30 @@ function QuestList({
           count={quests.length}
         />
       ))}
-      <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+      <div style={{ display: "flex", gap: 8, marginTop: 12, alignItems: "center" }}>
         <TextField
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && add()}
           placeholder="Add a task…"
-          style={{ flex: 1 }}
+          style={{ flex: 1, fontSize: 13.5, padding: "8px 11px" }}
         />
-        <Button onClick={add} style={{ padding: "0 16px" }}>
+        <button
+          onClick={() => setDraftEst(EST_PRESETS[(EST_PRESETS.indexOf(draftEst) + 1) % EST_PRESETS.length])}
+          className="fos-btn fos-mono"
+          title="Estimate"
+          style={{
+            background: "transparent",
+            border: `1px solid ${T.border}`,
+            borderRadius: 20,
+            padding: "6px 11px",
+            fontSize: 11,
+            color: T.muted,
+          }}
+        >
+          {draftEst}m
+        </button>
+        <Button onClick={add} style={{ padding: "8px 12px" }}>
           ADD
         </Button>
       </div>
