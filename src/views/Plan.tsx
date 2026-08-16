@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { AppState, Quest, Track } from "@/types";
 import {
   addQuest,
@@ -11,6 +11,7 @@ import {
   moveTrack,
   questCount,
   renameQuest,
+  renameStep,
   renameTrack,
   setQuestDone,
   setStepDone,
@@ -19,7 +20,7 @@ import {
 } from "@/lib/domain";
 import { fmtMin } from "@/lib/dates";
 import { EST_PRESETS, T, TRACK_PALETTE } from "@/styles/theme";
-import { Button, Check, EstChip, Label, SynthesisLoop, TextField } from "@/components/ui";
+import { Button, Check, ConfirmModal, EstChip, Label, SynthesisLoop, TextField } from "@/components/ui";
 
 type Apply = (fn: (s: AppState) => AppState) => void;
 
@@ -29,10 +30,30 @@ type Apply = (fn: (s: AppState) => AppState) => void;
  * Quests collapse to a single line by default so a track reads as a
  * high-level list; expanding one reveals its steps and the add-step form.
  */
-export default function Plan({ state, apply }: { state: AppState; apply: Apply }) {
+export default function Plan({ state, apply: applyRaw }: { state: AppState; apply: Apply }) {
   const [openTrack, setOpenTrack] = useState<string | null>(state.tracks[0]?.id ?? null);
   const [newTrack, setNewTrack] = useState("");
   const [editMode, setEditMode] = useState(false);
+  const [trackToDelete, setTrackToDelete] = useState<Track | null>(null);
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
+  const saveTimers = useRef<{ saved?: ReturnType<typeof setTimeout>; idle?: ReturnType<typeof setTimeout> }>({});
+
+  const apply: Apply = (fn) => {
+    applyRaw(fn);
+    clearTimeout(saveTimers.current.saved);
+    clearTimeout(saveTimers.current.idle);
+    setSaveStatus("saving");
+    saveTimers.current.saved = setTimeout(() => setSaveStatus("saved"), 400);
+    saveTimers.current.idle = setTimeout(() => setSaveStatus("idle"), 2200);
+  };
+
+  useEffect(
+    () => () => {
+      clearTimeout(saveTimers.current.saved);
+      clearTimeout(saveTimers.current.idle);
+    },
+    [],
+  );
 
   const createTrack = () => {
     const name = newTrack.trim();
@@ -84,39 +105,54 @@ export default function Plan({ state, apply }: { state: AppState; apply: Apply }
             Plan
           </h1>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 2, padding: 3, background: T.borderSoft, borderRadius: 20, flexShrink: 0 }}>
-          <button
-            onClick={() => setEditMode(false)}
-            className="fos-btn fos-mono"
-            style={{
-              border: "none",
-              borderRadius: 20,
-              padding: "6px 12px",
-              fontSize: 11,
-              fontWeight: 500,
-              cursor: "pointer",
-              background: editMode ? "transparent" : T.text,
-              color: editMode ? T.muted : T.bg,
-            }}
-          >
-            READ
-          </button>
-          <button
-            onClick={() => setEditMode(true)}
-            className="fos-btn fos-mono"
-            style={{
-              border: "none",
-              borderRadius: 20,
-              padding: "6px 12px",
-              fontSize: 11,
-              fontWeight: 500,
-              cursor: "pointer",
-              background: editMode ? T.text : "transparent",
-              color: editMode ? T.bg : T.muted,
-            }}
-          >
-            EDIT
-          </button>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, flexShrink: 0 }}>
+          {editMode && (
+            <span
+              className="fos-mono"
+              style={{
+                fontSize: 10,
+                letterSpacing: ".06em",
+                color: saveStatus === "saved" ? T.green : T.faint,
+                transition: "color .5s ease",
+              }}
+            >
+              {saveStatus === "saving" ? "saving…" : saveStatus === "saved" ? "saved ✓" : "autosaves"}
+            </span>
+          )}
+          <div style={{ display: "flex", alignItems: "center", gap: 2, padding: 3, background: T.borderSoft, borderRadius: 20 }}>
+            <button
+              onClick={() => setEditMode(false)}
+              className="fos-btn fos-mono"
+              style={{
+                border: "none",
+                borderRadius: 20,
+                padding: "6px 12px",
+                fontSize: 11,
+                fontWeight: 500,
+                cursor: "pointer",
+                background: editMode ? "transparent" : T.text,
+                color: editMode ? T.muted : T.bg,
+              }}
+            >
+              READ
+            </button>
+            <button
+              onClick={() => setEditMode(true)}
+              className="fos-btn fos-mono"
+              style={{
+                border: "none",
+                borderRadius: 20,
+                padding: "6px 12px",
+                fontSize: 11,
+                fontWeight: 500,
+                cursor: "pointer",
+                background: editMode ? T.text : "transparent",
+                color: editMode ? T.bg : T.muted,
+              }}
+            >
+              EDIT
+            </button>
+          </div>
         </div>
       </div>
       <p style={{ color: T.muted, fontSize: 14, margin: "0 0 26px", maxWidth: 580 }}>
@@ -155,6 +191,7 @@ export default function Plan({ state, apply }: { state: AppState; apply: Apply }
                           contentEditable
                           suppressContentEditableWarning
                           onClick={(e) => e.stopPropagation()}
+                          onFocus={() => !isOpen && setOpenTrack(track.id)}
                           onBlur={(e) => {
                             const text = e.currentTarget.textContent?.trim() || track.name;
                             apply((s) => renameTrack(s, track.id, text));
@@ -174,9 +211,9 @@ export default function Plan({ state, apply }: { state: AppState; apply: Apply }
                       ) : (
                         <div style={{ fontSize: 17, fontWeight: 600 }}>{track.name}</div>
                       )}
-                      <div className="fos-mono" style={{ fontSize: 11, color: T.muted, marginTop: 2 }}>
-                        {track.tag}
-                      </div>
+                      {!editMode && track.intent && (
+                        <div style={{ fontSize: 12.5, color: T.muted, marginTop: 2, lineHeight: 1.4 }}>{track.intent}</div>
+                      )}
                     </div>
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: 14, flexShrink: 0 }}>
@@ -217,10 +254,10 @@ export default function Plan({ state, apply }: { state: AppState; apply: Apply }
                           </button>
                         </div>
                         <button
-                          onClick={() => apply((s) => deleteTrack(s, track.id))}
-                          className="fos-del fos-mono"
+                          onClick={() => setTrackToDelete(track)}
+                          className="fos-btn fos-mono"
                           title="Delete track"
-                          style={{ background: "none", border: "none", color: T.faint, fontSize: 16 }}
+                          style={{ background: "none", border: "none", color: T.faint, fontSize: 16, cursor: "pointer" }}
                         >
                           ×
                         </button>
@@ -251,7 +288,7 @@ export default function Plan({ state, apply }: { state: AppState; apply: Apply }
 
               {isOpen && (
                 <div style={{ padding: "0 20px 20px" }}>
-                  {editMode ? (
+                  {editMode && (
                     <div
                       contentEditable
                       suppressContentEditableWarning
@@ -273,12 +310,6 @@ export default function Plan({ state, apply }: { state: AppState; apply: Apply }
                     >
                       {track.intent}
                     </div>
-                  ) : (
-                    track.intent && (
-                      <p style={{ color: T.muted, fontSize: 13.5, lineHeight: 1.5, margin: "0 0 16px", paddingLeft: 22 }}>
-                        {track.intent}
-                      </p>
-                    )
                   )}
                   {track.id === "t4" && (
                     <div style={{ paddingLeft: 22, marginBottom: 18 }}>
@@ -342,6 +373,23 @@ export default function Plan({ state, apply }: { state: AppState; apply: Apply }
             ))}
           </div>
         </div>
+      )}
+
+      {trackToDelete && (
+        <ConfirmModal
+          title={`Delete "${trackToDelete.name}"?`}
+          body={
+            trackToDelete.quests.length > 0
+              ? `This removes the track and its ${trackToDelete.quests.length} task${trackToDelete.quests.length === 1 ? "" : "s"} for good. This can't be undone.`
+              : "This can't be undone."
+          }
+          confirmLabel="DELETE TRACK"
+          onConfirm={() => {
+            apply((s) => deleteTrack(s, trackToDelete.id));
+            setTrackToDelete(null);
+          }}
+          onCancel={() => setTrackToDelete(null)}
+        />
       )}
     </div>
   );
@@ -582,16 +630,40 @@ function QuestRow({
                     size={16}
                     onClick={() => apply((s) => setStepDone(s, track.id, quest.id, step.id, !step.done))}
                   />
-                  <span
-                    style={{
-                      flex: 1,
-                      fontSize: 13.5,
-                      textDecoration: step.done ? "line-through" : "none",
-                      color: step.done ? T.muted : T.text,
-                    }}
-                  >
-                    {step.text}
-                  </span>
+                  {editMode ? (
+                    <div
+                      contentEditable
+                      suppressContentEditableWarning
+                      onBlur={(e) => {
+                        const text = e.currentTarget.textContent?.trim() || step.text;
+                        apply((s) => renameStep(s, track.id, quest.id, step.id, text));
+                      }}
+                      style={{
+                        flex: 1,
+                        fontSize: 13.5,
+                        textDecoration: step.done ? "line-through" : "none",
+                        color: step.done ? T.muted : T.text,
+                        padding: "2px 6px",
+                        margin: "-2px -6px",
+                        borderRadius: 5,
+                        background: T.borderSoft,
+                        outline: "none",
+                      }}
+                    >
+                      {step.text}
+                    </div>
+                  ) : (
+                    <span
+                      style={{
+                        flex: 1,
+                        fontSize: 13.5,
+                        textDecoration: step.done ? "line-through" : "none",
+                        color: step.done ? T.muted : T.text,
+                      }}
+                    >
+                      {step.text}
+                    </span>
+                  )}
                   <EstChip
                     min={step.est}
                     color={track.color}

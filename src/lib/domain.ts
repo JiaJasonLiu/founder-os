@@ -255,6 +255,23 @@ export function renameQuest(state: AppState, trackId: string, questId: string, t
   return next;
 }
 
+/** Rename a step's text. */
+export function renameStep(
+  state: AppState,
+  trackId: string,
+  questId: string,
+  stepId: string,
+  text: string,
+): AppState {
+  const next = clone(state);
+  const q = findQuest(next, trackId, questId);
+  if (!q) return state;
+  const step = q.steps.find((s) => s.id === stepId);
+  if (!step) return state;
+  step.text = text;
+  return next;
+}
+
 export function addQuest(
   state: AppState,
   trackId: string,

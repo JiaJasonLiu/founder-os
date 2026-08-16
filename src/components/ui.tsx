@@ -1,4 +1,5 @@
 import type { CSSProperties, ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { T } from "@/styles/theme";
 
 /* ------------------------------------------------------------------ *
@@ -199,6 +200,60 @@ export function Button({
     >
       {children}
     </button>
+  );
+}
+/** A modal overlay confirming a destructive action before it happens. */
+export function ConfirmModal({
+  title,
+  body,
+  confirmLabel,
+  onConfirm,
+  onCancel,
+}: {
+  title: string;
+  body: ReactNode;
+  confirmLabel: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  return createPortal(
+    <div
+      role="dialog"
+      aria-modal="true"
+      onClick={onCancel}
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(10,11,13,.6)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        zIndex: 100,
+        padding: 20,
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: T.panel,
+          border: `1px solid ${T.border}`,
+          borderRadius: 14,
+          padding: 22,
+          maxWidth: 380,
+          width: "100%",
+        }}
+      >
+        <div style={{ fontSize: 17, fontWeight: 600, color: T.text, marginBottom: 10 }}>{title}</div>
+        <div style={{ fontSize: 13.5, lineHeight: 1.5, color: T.muted, marginBottom: 20 }}>{body}</div>
+        <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+          <Button onClick={onCancel}>CANCEL</Button>
+          <Button onClick={onConfirm} style={{ border: `1px solid ${T.clay}`, color: T.clay }}>
+            {confirmLabel}
+          </Button>
+        </div>
+      </div>
+    </div>,
+    document.body,
   );
 }
 
