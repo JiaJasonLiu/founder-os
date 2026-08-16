@@ -196,6 +196,65 @@ export function completeAction(state: AppState, action: Action): AppState {
     : setQuestDone(state, action.trackId, action.questId, true);
 }
 
+/** Rename a track. */
+export function renameTrack(state: AppState, trackId: string, name: string): AppState {
+  const next = clone(state);
+  const t = findTrack(next, trackId);
+  if (!t) return state;
+  t.name = name;
+  return next;
+}
+
+/** Edit a track's intent — why it exists. */
+export function setTrackIntent(state: AppState, trackId: string, intent: string): AppState {
+  const next = clone(state);
+  const t = findTrack(next, trackId);
+  if (!t) return state;
+  t.intent = intent;
+  return next;
+}
+
+/** Move a track up (-1) or down (+1) within the plan. */
+export function moveTrack(state: AppState, trackId: string, dir: -1 | 1): AppState {
+  const next = clone(state);
+  const arr = next.tracks;
+
+  const i = arr.findIndex((t) => t.id === trackId);
+  const j = i + dir;
+  if (i < 0 || j < 0 || j >= arr.length) return state;
+
+  [arr[i], arr[j]] = [arr[j], arr[i]];
+  return next;
+}
+
+/** Delete a track and everything in it. */
+export function deleteTrack(state: AppState, trackId: string): AppState {
+  const next = clone(state);
+  const t = findTrack(next, trackId);
+  if (!t) return state;
+
+  const questIds = new Set(t.quests.map((q) => q.id));
+  next.tracks = next.tracks.filter((tr) => tr.id !== trackId);
+  next.starters = next.starters.filter((s) => !questIds.has(s));
+  next.history = next.history.filter((h) => h.trackId !== trackId);
+  if (next.spotlight.monthTrackId === trackId) {
+    next.spotlight = { ...next.spotlight, monthTrackId: null, monthSetAt: null };
+  }
+  if (next.spotlight.weekQuestId && questIds.has(next.spotlight.weekQuestId)) {
+    next.spotlight = { ...next.spotlight, weekQuestId: null, weekSetAt: null };
+  }
+  return next;
+}
+
+/** Rename a quest's text. */
+export function renameQuest(state: AppState, trackId: string, questId: string, text: string): AppState {
+  const next = clone(state);
+  const q = findQuest(next, trackId, questId);
+  if (!q) return state;
+  q.text = text;
+  return next;
+}
+
 export function addQuest(
   state: AppState,
   trackId: string,

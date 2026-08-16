@@ -6,10 +6,15 @@ import {
   cycleEstimate,
   deleteQuest,
   deleteStep,
+  deleteTrack,
   moveQuest,
+  moveTrack,
   questCount,
+  renameQuest,
+  renameTrack,
   setQuestDone,
   setStepDone,
+  setTrackIntent,
   toggleStar,
 } from "@/lib/domain";
 import { fmtMin } from "@/lib/dates";
@@ -27,6 +32,7 @@ type Apply = (fn: (s: AppState) => AppState) => void;
 export default function Plan({ state, apply }: { state: AppState; apply: Apply }) {
   const [openTrack, setOpenTrack] = useState<string | null>(state.tracks[0]?.id ?? null);
   const [newTrack, setNewTrack] = useState("");
+  const [editMode, setEditMode] = useState(false);
 
   const createTrack = () => {
     const name = newTrack.trim();
@@ -71,17 +77,56 @@ export default function Plan({ state, apply }: { state: AppState; apply: Apply }
 
   return (
     <div className="fos-fade">
-      <Label style={{ marginBottom: 12 }}>BREAK IT DOWN</Label>
-      <h1 className="fos-serif" style={{ fontSize: 34, margin: "0 0 6px", fontWeight: 400 }}>
-        Plan
-      </h1>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+        <div>
+          <Label style={{ marginBottom: 12 }}>BREAK IT DOWN</Label>
+          <h1 className="fos-serif" style={{ fontSize: 34, margin: "0 0 6px", fontWeight: 400 }}>
+            Plan
+          </h1>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 2, padding: 3, background: T.borderSoft, borderRadius: 20, flexShrink: 0 }}>
+          <button
+            onClick={() => setEditMode(false)}
+            className="fos-btn fos-mono"
+            style={{
+              border: "none",
+              borderRadius: 20,
+              padding: "6px 12px",
+              fontSize: 11,
+              fontWeight: 500,
+              cursor: "pointer",
+              background: editMode ? "transparent" : T.text,
+              color: editMode ? T.muted : T.bg,
+            }}
+          >
+            READ
+          </button>
+          <button
+            onClick={() => setEditMode(true)}
+            className="fos-btn fos-mono"
+            style={{
+              border: "none",
+              borderRadius: 20,
+              padding: "6px 12px",
+              fontSize: 11,
+              fontWeight: 500,
+              cursor: "pointer",
+              background: editMode ? T.text : "transparent",
+              color: editMode ? T.bg : T.muted,
+            }}
+          >
+            EDIT
+          </button>
+        </div>
+      </div>
       <p style={{ color: T.muted, fontSize: 14, margin: "0 0 26px", maxWidth: 580 }}>
-        A high-level list per track. Tap a task to open it, then add hour-sized steps inside. Use ▲▼ to reorder, the time
-        chip to size things, and ★ to flag one for Focus.
+        {editMode
+          ? "Edit titles and notes in place, reorder with ▲▼, or remove a track. Switch back to READ when you're done."
+          : "A high-level list per track. Tap a task to open it, then add hour-sized steps inside. Use ▲▼ to reorder, the time chip to size things, and ★ to flag one for Focus."}
       </p>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-        {state.tracks.map((track) => {
+        {state.tracks.map((track, trackIndex) => {
           const { total, done } = questCount(track);
           const isOpen = openTrack === track.id;
           return (
@@ -90,58 +135,158 @@ export default function Plan({ state, apply }: { state: AppState; apply: Apply }
               className="fos-card fos-hover"
               style={{ background: T.panel, border: `1px solid ${T.borderSoft}`, borderRadius: 14, overflow: "hidden" }}
             >
-              <button
-                onClick={() => setOpenTrack(isOpen ? null : track.id)}
+              <div
                 style={{
                   width: "100%",
                   textAlign: "left",
-                  background: "none",
-                  border: "none",
                   padding: "18px 20px",
-                  cursor: "pointer",
                   color: T.text,
                 }}
               >
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
+                  <div
+                    onClick={() => !editMode && setOpenTrack(isOpen ? null : track.id)}
+                    style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0, flex: 1, cursor: editMode ? "default" : "pointer" }}
+                  >
                     <span style={{ width: 10, height: 10, borderRadius: "50%", background: track.color, flexShrink: 0 }} />
-                    <div>
-                      <div style={{ fontSize: 17, fontWeight: 600 }}>{track.name}</div>
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      {editMode ? (
+                        <div
+                          contentEditable
+                          suppressContentEditableWarning
+                          onClick={(e) => e.stopPropagation()}
+                          onBlur={(e) => {
+                            const text = e.currentTarget.textContent?.trim() || track.name;
+                            apply((s) => renameTrack(s, track.id, text));
+                          }}
+                          style={{
+                            fontSize: 17,
+                            fontWeight: 600,
+                            padding: "1px 6px",
+                            margin: "-1px -6px",
+                            borderRadius: 6,
+                            background: T.borderSoft,
+                            outline: "none",
+                          }}
+                        >
+                          {track.name}
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: 17, fontWeight: 600 }}>{track.name}</div>
+                      )}
                       <div className="fos-mono" style={{ fontSize: 11, color: T.muted, marginTop: 2 }}>
                         {track.tag}
                       </div>
                     </div>
                   </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-                    <span className="fos-mono" style={{ fontSize: 12, color: T.muted }}>
-                      {done}/{total}
-                    </span>
-                    <span
+                  <div style={{ display: "flex", alignItems: "center", gap: 14, flexShrink: 0 }}>
+                    {editMode ? (
+                      <>
+                        <div style={{ display: "flex", flexDirection: "column" }}>
+                          <button
+                            onClick={() => apply((s) => moveTrack(s, track.id, -1))}
+                            disabled={trackIndex === 0}
+                            aria-label="Move track up"
+                            style={{
+                              background: "none",
+                              border: "none",
+                              padding: "0 3px",
+                              lineHeight: 0.9,
+                              fontSize: 9,
+                              color: trackIndex === 0 ? T.borderSoft : T.faint,
+                              cursor: trackIndex === 0 ? "default" : "pointer",
+                            }}
+                          >
+                            ▲
+                          </button>
+                          <button
+                            onClick={() => apply((s) => moveTrack(s, track.id, 1))}
+                            disabled={trackIndex === state.tracks.length - 1}
+                            aria-label="Move track down"
+                            style={{
+                              background: "none",
+                              border: "none",
+                              padding: "0 3px",
+                              lineHeight: 0.9,
+                              fontSize: 9,
+                              color: trackIndex === state.tracks.length - 1 ? T.borderSoft : T.faint,
+                              cursor: trackIndex === state.tracks.length - 1 ? "default" : "pointer",
+                            }}
+                          >
+                            ▼
+                          </button>
+                        </div>
+                        <button
+                          onClick={() => apply((s) => deleteTrack(s, track.id))}
+                          className="fos-del fos-mono"
+                          title="Delete track"
+                          style={{ background: "none", border: "none", color: T.faint, fontSize: 16 }}
+                        >
+                          ×
+                        </button>
+                      </>
+                    ) : (
+                      <span className="fos-mono" style={{ fontSize: 12, color: T.muted }}>
+                        {done}/{total}
+                      </span>
+                    )}
+                    <button
+                      onClick={() => setOpenTrack(isOpen ? null : track.id)}
                       style={{
+                        background: "none",
+                        border: "none",
+                        cursor: "pointer",
                         color: T.faint,
                         transform: isOpen ? "rotate(90deg)" : "none",
                         transition: "transform .2s",
                         fontSize: 12,
+                        padding: 0,
                       }}
                     >
                       ▶
-                    </span>
+                    </button>
                   </div>
                 </div>
-              </button>
+              </div>
 
               {isOpen && (
                 <div style={{ padding: "0 20px 20px" }}>
-                  <p style={{ color: T.muted, fontSize: 13.5, lineHeight: 1.5, margin: "0 0 16px", paddingLeft: 22 }}>
-                    {track.intent}
-                  </p>
+                  {editMode ? (
+                    <div
+                      contentEditable
+                      suppressContentEditableWarning
+                      onBlur={(e) => {
+                        const text = e.currentTarget.textContent?.trim() || "";
+                        apply((s) => setTrackIntent(s, track.id, text));
+                      }}
+                      style={{
+                        color: T.muted,
+                        fontSize: 13.5,
+                        lineHeight: 1.5,
+                        margin: "0 0 16px",
+                        marginLeft: 22,
+                        padding: "3px 7px",
+                        borderRadius: 6,
+                        background: T.borderSoft,
+                        outline: "none",
+                      }}
+                    >
+                      {track.intent}
+                    </div>
+                  ) : (
+                    track.intent && (
+                      <p style={{ color: T.muted, fontSize: 13.5, lineHeight: 1.5, margin: "0 0 16px", paddingLeft: 22 }}>
+                        {track.intent}
+                      </p>
+                    )
+                  )}
                   {track.id === "t4" && (
                     <div style={{ paddingLeft: 22, marginBottom: 18 }}>
                       <SynthesisLoop />
                     </div>
                   )}
 
-                  <QuestList state={state} apply={apply} track={track} quests={track.quests} />
+                  <QuestList state={state} apply={apply} track={track} quests={track.quests} editMode={editMode} />
                 </div>
               )}
             </div>
@@ -207,11 +352,13 @@ function QuestList({
   apply,
   track,
   quests,
+  editMode,
 }: {
   state: AppState;
   apply: Apply;
   track: Track;
   quests: Quest[];
+  editMode: boolean;
 }) {
   const [draft, setDraft] = useState("");
   const [draftEst, setDraftEst] = useState(30);
@@ -232,6 +379,7 @@ function QuestList({
           quest={q}
           index={i}
           count={quests.length}
+          editMode={editMode}
         />
       ))}
       <div style={{ display: "flex", gap: 8, marginTop: 12, alignItems: "center" }}>
@@ -272,6 +420,7 @@ function QuestRow({
   quest,
   index,
   count,
+  editMode,
 }: {
   state: AppState;
   apply: Apply;
@@ -279,6 +428,7 @@ function QuestRow({
   quest: Quest;
   index: number;
   count: number;
+  editMode: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [stepText, setStepText] = useState("");
@@ -333,17 +483,42 @@ function QuestRow({
           onClick={() => apply((s) => setQuestDone(s, track.id, quest.id, !quest.done))}
         />
 
-        <div onClick={() => setOpen(!open)} style={{ flex: 1, minWidth: 0, cursor: "pointer" }}>
-          <div
-            style={{
-              fontSize: 14.5,
-              lineHeight: 1.4,
-              textDecoration: quest.done ? "line-through" : "none",
-              color: quest.done ? T.muted : T.text,
-            }}
-          >
-            {quest.text}
-          </div>
+        <div onClick={() => !editMode && setOpen(!open)} style={{ flex: 1, minWidth: 0, cursor: editMode ? "default" : "pointer" }}>
+          {editMode ? (
+            <div
+              contentEditable
+              suppressContentEditableWarning
+              onClick={(e) => e.stopPropagation()}
+              onBlur={(e) => {
+                const text = e.currentTarget.textContent?.trim() || quest.text;
+                apply((s) => renameQuest(s, track.id, quest.id, text));
+              }}
+              style={{
+                fontSize: 14.5,
+                lineHeight: 1.4,
+                textDecoration: quest.done ? "line-through" : "none",
+                color: quest.done ? T.muted : T.text,
+                padding: "2px 6px",
+                margin: "-2px -6px",
+                borderRadius: 5,
+                background: T.borderSoft,
+                outline: "none",
+              }}
+            >
+              {quest.text}
+            </div>
+          ) : (
+            <div
+              style={{
+                fontSize: 14.5,
+                lineHeight: 1.4,
+                textDecoration: quest.done ? "line-through" : "none",
+                color: quest.done ? T.muted : T.text,
+              }}
+            >
+              {quest.text}
+            </div>
+          )}
           <div className="fos-mono" style={{ fontSize: 10, color: T.muted, marginTop: 4 }}>
             {hasSteps ? `${doneSteps}/${quest.steps.length} steps · ${fmtMin(totalEst)}` : fmtMin(quest.est)}
             {starred ? " · ★" : ""}
